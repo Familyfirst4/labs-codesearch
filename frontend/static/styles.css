@@ -1,81 +1,120 @@
-.highlight {
-    font-weight: bold;
-    background-color: rgba(255,255,140,0.5);
+/* Heading */
+
+.cs-client-js .cs-display-nojs,
+.cs-client-nojs .cs-display-onlyjs {
+	display: none;
 }
 
-.file {
-    margin: 10px 0 20px;
+.cs-heading {
+	text-align: center;
+	max-width: 1050px;
+	margin: 0 auto;
 }
 
-.lineno {
-  padding-right: .5em;
+.cs-field-reposelector .dropdown-menu.show {
+	max-height: min(70vh, 700px);
+	overflow-y: auto;
+}
+.cs-field-reposelector > .form-control:focus::placeholder {
+	color: #6c757d;
+}
+.cs-field-reposelector::after {
+	/* simulate margin-bottom on the absolutely positioned dropdown-menu */
+	content: "";
+	display: block;
+	position: absolute;
+	height: calc(min(70vh, 700px) + 20px);
+	width: 1px;
 }
 
-.code {
-  padding-left: .5em;
+.cs-stats::before {
+	content: attr(data-files) " files (" attr(data-time-query) "ms query / " attr(data-time-render) "ms render)";
 }
 
-.card-body {
-  padding-top: 0;
-  padding-bottom: 0;
+/* Results */
+
+.cs-output-placeholder {
+	/* match height of buildFormatNav, avoid margin as it collapsed with form's margin */
+	padding-top: 38px;
+}
+.cs-output-placeholder summary {
+	/* prevent interaction with placeholder */
+	cursor: initial;
+	pointer-events: none;
+}
+.cs-output > .alert:first-child {
+	margin-top: 38px;
 }
 
-.results a {
-  color: rgb(33, 37, 41);
+.cs-result {
+	/* override bootstrap .card-body */
+	padding: 0;
+	/* allow horizontal scrolling of long code lines */
+	overflow-x: auto;
+	overflow-y: hidden;
 }
 
-.heading {
-    text-align: center;
-    max-width: 960px;
-    margin: 1rem auto 0;
+.cs-result code {
+	/* override boostrap */
+	color: inherit;
+	white-space: pre;
 }
 
-.heading a {
-    color: #007bff;
+.cs-line {
+	font-family: Consolas, "Liberation Mono", Menlo, Courier, monospace;
+	font-size: 14px;
+	/* this prevents long cs-line-code values from being pushed below cs-line-no */
+	white-space: pre;
 }
 
-.index {
-    display: inline;
-}
-.index a {
-    white-space: nowrap;
-}
-.index:after {
-    content:" • ";
-}
-.index:last-child:after {
-    content: none;
+.cs-line-boundary {
+	border-top: 1px solid rgba(0,0,0,.125);
 }
 
-.form-query,
-.load-more {
-    width: 100%;
+.cs-line-no {
+	display: inline-block;
+	width: 3rem;
+	text-align: right;
+	padding: 0 0.5rem 0 0;
+	/* match bootstrap .card border */
+	border-right: 1px solid rgba(0,0,0,.125);
+	user-select: none;
 }
 
-.case-insensitive-checkbox {
-    padding: .375rem 1.25rem;
+.cs-line-code {
+	padding: 3px 0 3px 0.5rem;
 }
 
-.spinner-border.search-spinner {
-    margin-right: .125rem;
-    vertical-align: initial;
+.cs-highlight,
+.cs-line-code em {
+	display: inline-block;
+	font-style: normal;
+	font-weight: bold;
+	color: #333;
+	background-color: rgba(255,255,140,0.5);
 }
 
-h2 {
-    margin-top: .5rem;
+.cs-phabresult {
+	min-height: 20rem;
+	white-space: pre;;
 }
 
-/* We want reposlist to be first on mobile but right on desktop */
-@media (max-width: 991px) {
-    .cards {
-        order: 2;
-    }
-
-    .reposlist {
-        order: 1;
-    }
+.cs-reposlist {
+	max-height: 50vh;
+	overflow: auto;
+	padding-top: 0.5rem;
+	padding-bottom: 0.5rem;
+}
+@media (min-width: 992px) {
+	.cs-reposlist {
+		position: sticky;
+		top: 0;
+		max-height: 100vh;
+	}
 }
 
-.border-right {
-    user-select: none;
+/* Footer */
+
+footer {
+	text-align: center;
 }

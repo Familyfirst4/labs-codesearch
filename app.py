@@ -18,7 +18,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 
 from flask import Flask, Response, request, redirect, url_for, \
-    send_from_directory, render_template, jsonify
+    send_from_directory, jsonify
 
 from collections import OrderedDict
 import json
@@ -33,51 +33,15 @@ if os.path.exists('/etc/codesearch_ports.json'):
     with open('/etc/codesearch_ports.json') as f:
         app.config['PORTS'] = json.load(f)
 
-# This order is the order they will display in the UI
-DESCRIPTIONS = {
-    'search': 'Everything',
-    'core': 'MediaWiki core',
-    'extensions': 'Extensions',
-    'skins': 'Skins',
-    'things': 'Extensions & skins',
-    'bundled': 'MW tarball',
-    'deployed': 'Wikimedia deployed',
-    'libraries': 'Libraries',
-    'operations': 'Wikimedia Operations',
-    'puppet': 'Puppet',
-    'ooui': 'OOUI',
-    'milkshake': 'Milkshake',
-    'pywikibot': 'Pywikibot',
-    'services': 'Wikimedia Services',
-    'analytics': 'Analytics',
-    'wmcs': 'Wikimedia Cloud Services',
-    # Not visible
-    'armchairgm': 'ArmchairGM',
-    'shouthow': 'ShoutHow',
-}
-HIDDEN = ['armchairgm', 'shouthow']
-LINK_OPENSEARCH = re.compile('<link rel="search" .*?/>', flags=re.DOTALL)
+HIDDEN = ['armchairgm', 'shouthow', 'devtools']
 HOUND_STARTUP = 'Hound is not ready.\n'
 
 
-@app.route('/favicon.ico')
-def favicon():
-    # http://flask.pocoo.org/docs/0.12/patterns/favicon/
-    return send_from_directory(
-        os.path.join(app.root_path, 'static'),
-        'favicon.ico',
-        mimetype='image/vnd.microsoft.icon')
-
-
-def index_url(target, current):
-    text = DESCRIPTIONS[target]
-    if target == current:
-        return f'<b>{text}</b>'
-    else:
-        return '<a href="{}">{}</a>'.format(
-            url_for('index', backend=target),
-            text
-        )
+@app.after_request
+def after_request(resp):
+    # https://flask.palletsprojects.com/en/1.1.x/api/#flask.Flask.after_request
+    resp.headers['access-control-allow-origin'] = '*'
+    return resp
 
 
 @app.route('/')
@@ -128,7 +92,7 @@ def _health() -> OrderedDict:
 
 @app.route('/_health')
 def health():
-    return render_template('health.html', status=_health())
+    return redirect('https://codesearch.wmcloud.org/_health/')
 
 
 @app.route('/_health.json')
@@ -152,18 +116,19 @@ def index(backend):
     if backend not in app.config['PORTS']:
         return 'invalid backend'
     sep = '</li><li class="index">'
-    urls = sep.join(index_url(target, backend)
-                    for target in DESCRIPTIONS
-                    if target not in HIDDEN and target in app.config['PORTS'])
+    urls = sep.join('<a href="{}">{}</a>'.format(url_for('index', backend=target), target)
+                    for target in app.config['PORTS']
+                    if target not in HIDDEN)
+
+    title = f'<title>Hound: {backend} - MediaWiki Codesearch</title>'
+
     # max-width matches hound's css for #root
     header = f"""
 <div style="text-align: center; max-width: 960px; margin: 0 auto;">
-<h2>MediaWiki code search</h2>
-
+<h2>Hound: /{backend}</h2>
 <ul><li class="index">{urls}</li></ul>
 </div>
 """
-    title = '<title>MediaWiki code search</title>'
 
     style = """
 <style>
@@ -184,37 +149,23 @@ def index(backend):
 
     footer = """
 <p style="text-align: center;">
-<a href="https://www.mediawiki.org/wiki/codesearch">MediaWiki code search</a>
-is powered by <a href="https://github.com/hound-search/hound">hound</a>.
+<a href="https://gerrit.wikimedia.org/g/labs/codesearch">Source code</a> &bull;
+<a href="https://phabricator.wikimedia.org/tag/vps-project-codesearch/">Issue tracker</a>
 <br />
-<a href="https://gerrit.wikimedia.org/g/labs/codesearch">Source code</a>
-is available under the terms of the GPL v3 or any later version.
+<a href="https://www.mediawiki.org/wiki/Codesearch">MediaWiki Codesearch</a>
+is powered by <a href="https://github.com/hound-search/hound">Hound</a>.
+License: GPL-3.0-or-later.
 </p>
 """
 
-    opensearch_link = """
-<link rel="search" href="%s"
-      type="application/opensearchdescription+xml"
-      title="MediaWiki code search" />
-""" % url_for('opensearch', backend=backend)
-
     def mangle(text):
+        text = text.replace('<title>Hound</title>', title)
+        text = re.sub(r'<link rel="search".*?/>', '', text, flags=re.DOTALL)
+        text = text.replace('</head>', style + '</head>')
         text = text.replace('<body>', '<body>' + header)
         text = text.replace('</body>', footer + '</body>')
-        text = text.replace('<title>Hound</title>', title)
-        text = text.replace('</head>', style + '</head>')
-        text = LINK_OPENSEARCH.sub(opensearch_link, text)
         return text
     return proxy(backend, mangle=mangle)
-
-
-@app.route('/<backend>/open_search.xml')
-def opensearch(backend):
-    if backend not in app.config['PORTS']:
-        return 'invalid backend'
-    temp = render_template('open_search.xml', backend=backend,
-                           description=DESCRIPTIONS[backend])
-    return Response(temp, content_type='text/xml')
 
 
 @app.route('/<backend>/config.json')
@@ -225,7 +176,6 @@ def config_json(backend):
         f'/srv/hound/hound-{backend}',
         'config.json'
     )
-    resp.headers['access-control-allow-origin'] = '*'
     return resp
 
 

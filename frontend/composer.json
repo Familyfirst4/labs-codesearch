@@ -1,0 +1,37 @@
+{
+	"require": {
+		"php": ">=8.1.0"
+	},
+	"autoload": {
+		"psr-4": {
+			"Wikimedia\\Codesearch\\": "src/"
+		}
+	},
+	"require-dev": {
+		"mustache/mustache": "2.14.2",
+		"mediawiki/mediawiki-codesniffer": "39.0.0",
+		"mediawiki/mediawiki-phan-config": "^0.14.0",
+		"php-parallel-lint/php-console-highlighter": "1.0.0",
+		"php-parallel-lint/php-parallel-lint": "1.3.2"
+	},
+	"config": {
+		"optimize-autoloader": true
+	},
+	"scripts": {
+		"serve": [
+			"Composer\\Config::disableProcessTimeout",
+			"@putenv PHP_CLI_SERVER_WORKERS=8",
+			"@php -S localhost:4000 -d opcache.enable=1 -d opcache.enable_cli=1 -d opcache.jit_buffer_size=32M -d apc.enable_cli=1 -d max_execution_time=100 -d memprof.output_dir=. src/dev-router.php"
+		],
+		"test": [
+			"parallel-lint . --exclude vendor",
+			"@phpcs",
+			"@phan"
+		],
+		"fix": [
+			"phpcbf"
+		],
+		"phan": "phan --allow-polyfill-parser --no-progress-bar",
+		"phpcs": "phpcs -sp"
+	}
+}

@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>{{doctitle}} - MediaWiki Codesearch</title>
+	<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+	<link rel="stylesheet" href="/static/lib/bootstrap-5.1.3/bootstrap.min.css">
+	<link rel="stylesheet" href="/static/styles.css{{staticversion}}">
+	<link rel="shortcut icon" href="/favicon.ico">
+</head>
+<body>
+	<div class="container">
+		<div class="cs-heading mt-2">
+			<h2>MediaWiki Codesearch</h2>
+		</div>
+	</div>
+	<div class="container py-4 border-top">
+		<p><a href="/" class="btn btn-outline-primary">&larr; Back to search</a>
+			<a href="{{healthPublicJson}}" class="btn btn-outline-secondary">View JSON</a>
+		</p>
+		<p>Health checks:</p>
+		<ul>
+		{{#healthData}}
+		<li><a href="{{href}}">{{backend}}</a>: {{#statusIsUp}}{{status}}{{/statusIsUp}}{{^statusIsUp}}<code>{{status}}</code>{{/statusIsUp}}
+		{{/healthData}}
+		</ul>
+	</div>
+	<div class="container">
+		<footer class="py-5 my-4 border-top text-secondary">
+			<p>
+				<a href="https://gerrit.wikimedia.org/g/labs/codesearch">Source code</a> &bull; <a href="https://phabricator.wikimedia.org/tag/vps-project-codesearch/">Issue tracker</a>
+				<br />
+				<small><a href="https://www.mediawiki.org/wiki/Codesearch">MediaWiki Codesearch</a>
+				is powered by <a href="https://github.com/hound-search/hound">Hound</a>. License: GPL-3.0-or-later.</small>
+			</p>
+		</footer>
+	</div>
+</body>
+</html>

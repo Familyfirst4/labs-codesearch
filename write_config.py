@@ -70,14 +70,24 @@ def parse_gitmodules(url):
         elif 'gitlab.com' in url:
             name = url.replace('https://gitlab.com/', '')
             repos.append((name, gitlab_repo(name)))
+        elif 'gitlab.wikimedia.org' in url:
+            name = url.replace('https://gitlab.wikimedia.org/', '')
+            repos.append((name, wmf_gitlab_repo(name)))
         elif 'invent.kde.org' in url:
             name = url.replace('https://invent.kde.org/', '')
-            repos.append((name, gh_repo(name, host='invent.kde.org')))
-        elif 'phabricator.nichework.com' in url:
-            # FIXME: implement
-            continue
+            repos.append((name, generic_repo(name, host='invent.kde.org')))
         else:
-            raise RuntimeError(f'Unsure how to handle URL: {url}')
+            # We sometimes discover entirely new code hosts via
+            # https://github.com/MWStake/nonwmf-extensions/blob/master/.gitmodules
+            #
+            # Avoid hard-failing nightly indexing cronjob on this (T383192)
+            #
+            # TODO: gitlab.wikibase.nl hosts WSSemanticParsedText as of Dec 2024.
+            # Should we implement a general gitlab handler?
+            # Security-wise, is it safe to do so?
+            #
+            # TODO: codeberg.org hosts CheckRegistrationEmailDomains as of Dec 2024.
+            print(f'Skip unsupported remote URL: {url}')
 
     return repos
 
@@ -89,10 +99,17 @@ def _get_gerrit_file(gerrit_name: str, path: str) -> str:
     return base64.b64decode(r.text).decode()
 
 
+def _get_gitlab_file(repo_name: str, path: str, branch="master") -> str:
+    url = f'https://gitlab.wikimedia.org/{repo_name}/-/raw/{branch}/{path}'
+    print('Fetching ' + url)
+    r = requests.get(url)
+    return r.text
+
+
 @functools.lru_cache()
 def _settings_yaml() -> dict:
-    return yaml.safe_load(_get_gerrit_file('mediawiki/tools/release',
-                                           'make-release/settings.yaml'))
+    return yaml.safe_load(_get_gitlab_file('repos/releng/release',
+                                           'make-release/settings.yaml', branch='main'))
 
 
 def gerrit_prefix_list(prefix: str) -> dict:
@@ -157,23 +174,77 @@ def bitbucket_repo(bb_name: str) -> dict:
     }
 
 
-def gitlab_repo(gl_name: str) -> dict:
-    # Lazy/avoid duplication
-    return gh_repo(gl_name, host='gitlab.com')
-
-
-def gh_repo(gh_name: str, host: str = 'github.com') -> dict:
+def gogs_repo(repo_name: str, host: str) -> dict:
     return {
-        'url': f'https://{host}/{gh_name}',
+        'url': f'https://{host}/{repo_name}',
+        # The default in Hound uses /blob/, which does something else in Gogs.
+        # The file browser in Gogs uses /src/ instead.
+        # https://phabricator.wikimedia.org/T304879
+        'url-pattern': {
+            'base-url': '{url}/src/{rev}/{path}{anchor}',
+            'anchor': '#L{line}'
+        },
         'ms-between-poll': POLL,
     }
+
+
+def generic_repo(repo_name: str, host: str) -> dict:
+    return {
+        'url': f'https://{host}/{repo_name}',
+        'ms-between-poll': POLL,
+    }
+
+
+def gitlab_repo(gl_name: str) -> dict:
+    return generic_repo(gl_name, 'gitlab.com')
+
+
+def gh_repo(gh_name: str) -> dict:
+    return generic_repo(gh_name, 'github.com')
+
+
+def wmf_gitlab_repo(name: str) -> dict:
+    return {
+        'url': f'https://gitlab.wikimedia.org/{name}.git',
+        'url-pattern': {
+            'base-url': 'https://gitlab.wikimedia.org/%s/-/tree/{rev}/{path}{anchor}' % name,
+            'anchor': '#L{line}'
+        },
+        'ms-between-poll': POLL,
+    }
+
+
+def wmf_gitlab_group_projects(group: str) -> dict:
+    """Recursively list all repos within a specific group"""
+    group = group.strip('/')
+    repos = {}
+    max_pages = 10
+    next_page = 1
+    while next_page and next_page < max_pages:
+        resp = requests.get(
+            f"https://gitlab.wikimedia.org/groups/{group}/-/children.json",
+            params={'per_page': 100, "page": next_page}
+        )
+        resp.raise_for_status()
+        if resp.headers.get('X-Next-Page'):
+            next_page = int(resp.headers['X-Next-Page'])
+        else:
+            next_page = False
+        for child in resp.json():
+            child_path = child["relative_path"].lstrip("/")
+            if child["type"] == "group":
+                repos.update(wmf_gitlab_group_projects(group=child_path))
+            elif child["type"] == "project":
+                repos[child_path] = wmf_gitlab_repo(name=child_path)
+
+    return repos
 
 
 def make_conf(name, args, core=False, exts=False, skins=False, ooui=False,
               operations=False, armchairgm=False, twn=False, milkshake=False,
               bundled=False, vendor=False, wikimedia=False, pywikibot=False,
               services=False, libs=False, analytics=False, puppet=False,
-              shouthow=False, schemas=False, wmcs=False):
+              shouthow=False, schemas=False, wmcs=False, devtools=False):
     conf = {
         'max-concurrent-indexers': 2,
         'dbpath': 'data',
@@ -190,9 +261,6 @@ def make_conf(name, args, core=False, exts=False, skins=False, ooui=False,
 
     if pywikibot:
         conf['repos']['Pywikibot'] = repo_info('pywikibot/core')
-
-    if ooui:
-        conf['repos']['OOUI'] = repo_info('oojs/ui')
 
     data = get_extdist_repos()
     if exts:
@@ -223,7 +291,7 @@ def make_conf(name, args, core=False, exts=False, skins=False, ooui=False,
             conf['repos'][repo_name] = info
 
     if puppet:
-        conf['repos']['Wikimedia Puppet'] = repo_info('operations/puppet')
+        conf['repos']['operations/puppet'] = repo_info('operations/puppet')
         conf['repos']['labs/private'] = repo_info('labs/private')
 
     if puppet or wmcs:
@@ -232,36 +300,26 @@ def make_conf(name, args, core=False, exts=False, skins=False, ooui=False,
         conf['repos']['cloud/instance-puppet-dev'] = repo_info('cloud/instance-puppet-dev')
 
     if operations:
-        conf['repos']['Wikimedia DNS'] = repo_info(
-            'operations/dns'
-        )
+        conf['repos']['operations/dns'] = repo_info('operations/dns')
         # Special Netbox repo
         conf['repos']['netbox DNS'] = phab_repo('netbox-exported-dns')
-        conf['repos']['Wikimedia MediaWiki config'] = repo_info(
+        conf['repos']['operations/mediawiki-config'] = repo_info(
             'operations/mediawiki-config'
         )
-        conf['repos']['scap'] = repo_info(
-            'mediawiki/tools/scap'
-        )
-        # CI config T217716
-        conf['repos']['Wikimedia continuous integration config'] = repo_info(
-            'integration/config'
-        )
-        conf['repos']['Blubber'] = repo_info('blubber')
-        conf['repos']['pipelinelib'] = repo_info('integration/pipelinelib')
 
-        # TODO: Move this to a dedicated section like "development tools"
-        conf['repos']['MediaWiki Vagrant'] = repo_info(
-            'mediawiki/vagrant'
-        )
+        conf['repos']['operations/alerts'] = repo_info('operations/alerts')
         conf['repos']['operations/cookbooks'] = repo_info('operations/cookbooks')
         conf['repos']['operations/deployment-charts'] = repo_info(
             'operations/deployment-charts'
         )
-        conf['repos']['operations/software'] = repo_info('operations/software')
-        conf['repos']['operations/software/conftool'] = repo_info(
-            'operations/software/conftool'
+        conf['repos']['operations/docker-images/production-images'] = repo_info(
+            'operations/docker-images/production-images'
         )
+        conf['repos']['operations/software'] = repo_info('operations/software')
+        conf['repos']['operations/software/benchmw'] = repo_info(
+            'operations/software/benchmw'
+        )
+        conf['repos']['sre/conftool'] = wmf_gitlab_repo('repos/sre/conftool')
         conf['repos']['operations/software/spicerack'] = repo_info(
             'operations/software/spicerack'
         )
@@ -269,32 +327,38 @@ def make_conf(name, args, core=False, exts=False, skins=False, ooui=False,
             'operations/software/purged'
         )
 
-        conf['repos']['performance/arc-lamp'] = repo_info('performance/arc-lamp')
-        conf['repos']['performance/asoranking'] = repo_info('performance/asoranking')
-        conf['repos']['performance/bttostatsv'] = repo_info('performance/bttostatsv')
-        conf['repos']['performance/coal'] = repo_info('performance/coal')
-        conf['repos']['performance/docroot'] = repo_info('performance/docroot')
-        conf['repos']['performance/fresnel'] = repo_info('performance/fresnel')
-        conf['repos']['performance/mobile-synthetic-monitoring-tests'] = repo_info(
-            'performance/mobile-synthetic-monitoring-tests'
+        conf['repos']['operations/homer/public'] = repo_info(
+            'operations/homer/public'
         )
-        conf['repos']['performance/navtiming'] = repo_info('performance/navtiming')
-        conf['repos']['performance/synthetic-monitoring-tests'] = repo_info(
-            'performance/synthetic-monitoring-tests'
-        )
-        conf['repos']['performance/WikimediaDebug'] = repo_info('performance/WikimediaDebug')
+
+        conf['repos']['operations/dumps'] = repo_info('operations/dumps')
+
+        conf['repos'].update(gerrit_prefix_list('performance/'))
+        conf['repos'].update(gerrit_prefix_list('mediawiki/php/'))
+
+    if devtools:
+        # Continous integration T217716, T332995
+        conf['repos'].update(gerrit_prefix_list('integration/'))
+        conf['repos'].update(gerrit_prefix_list('mediawiki/tools/'))
+
+        conf['repos']['mediawiki/vagrant'] = repo_info('mediawiki/vagrant')
+
+        conf['repos']['scap'] = wmf_gitlab_repo('repos/releng/scap')
+        conf['repos']['releng/release'] = wmf_gitlab_repo('repos/releng/release')
+        conf['repos']['Blubber'] = wmf_gitlab_repo('repos/releng/blubber')
+        conf['repos']['dev-images'] = wmf_gitlab_repo('repos/releng/dev-images')
+
+        conf['repos']['patchdemo'] = wmf_gitlab_repo('repos/qte/catalyst/patchdemo')
+
+        # (T354852) Important BlueSpice repos outside the extensions/ tree
+        conf['repos']['BlueSpiceMWConfig'] = repo_info('bluespice/mw-config')
+        conf['repos']['BlueSpiceMWConfigOverrides'] = repo_info('bluespice/mw-config/overrides')
 
     if armchairgm:
         conf['repos']['ArmchairGM'] = gh_repo('mary-kate/ArmchairGM')
 
     if twn:
         conf['repos']['translatewiki.net'] = repo_info('translatewiki')
-
-    if milkshake:
-        ms_repos = ['jquery.uls', 'jquery.ime', 'jquery.webfonts', 'jquery.i18n',
-                    'language-data']
-        for ms_repo in ms_repos:
-            conf['repos'][ms_repo] = gh_repo('wikimedia/' + ms_repo)
 
     if bundled:
         for repo_name in bundled_repos():
@@ -304,10 +368,18 @@ def make_conf(name, args, core=False, exts=False, skins=False, ooui=False,
         for repo_name in wikimedia_deployed_repos():
             conf['repos'][repo_name] = repo_info(repo_name)
         # Also mw-config (T214341)
-        conf['repos']['Wikimedia MediaWiki config'] = repo_info(
+        conf['repos']['operations/mediawiki-config'] = repo_info(
             'operations/mediawiki-config'
         )
         conf['repos']['WikimediaDebug'] = repo_info('performance/WikimediaDebug')
+        conf['repos'].update(gerrit_prefix_list('mediawiki/php/'))
+
+        conf['repos']['function-schemata'] = wmf_gitlab_repo(
+            'repos/abstract-wiki/wikifunctions/function-schemata'
+        )
+        conf['repos']['wikilambda-cli'] = wmf_gitlab_repo(
+            'repos/abstract-wiki/wikifunctions/wikilambda-cli'
+        )
 
     if vendor:
         conf['repos']['mediawiki/vendor'] = repo_info('mediawiki/vendor')
@@ -315,30 +387,45 @@ def make_conf(name, args, core=False, exts=False, skins=False, ooui=False,
     if services:
         conf['repos'].update(gerrit_prefix_list('mediawiki/services/'))
         conf['repos']['mwaddlink'] = repo_info('research/mwaddlink')
+        conf['repos']['recommendation-api'] = repo_info('research/recommendation-api')
         conf['repos']['Wikidata Query GUI'] = repo_info('wikidata/query/gui')
+        conf['repos']['New Lexeme form'] = gh_repo('wmde/new-lexeme-special-page')
         conf['repos']['Wikidata Query RDF'] = repo_info('wikidata/query/rdf')
+        conf['repos']['iPoid'] = wmf_gitlab_repo('repos/mediawiki/services/ipoid')
+        conf['repos']['Function Orchestrator'] = wmf_gitlab_repo(
+            'repos/abstract-wiki/wikifunctions/function-orchestrator'
+        )
+        conf['repos']['Function Evaluator'] = wmf_gitlab_repo(
+            'repos/abstract-wiki/wikifunctions/function-evaluator'
+        )
 
     if libs:
         conf['repos'].update(gerrit_prefix_list('mediawiki/libs/'))
         conf['repos']['AhoCorasick'] = repo_info('AhoCorasick')
+        conf['repos']['at-ease'] = repo_info('at-ease')
+        conf['repos']['base-convert'] = repo_info('base-convert')
         conf['repos']['cdb'] = repo_info('cdb')
         conf['repos']['CLDRPluralRuleParser'] = repo_info('CLDRPluralRuleParser')
+        conf['repos']['css-sanitizer'] = repo_info('css-sanitizer')
+        conf['repos']['DeadlinkChecker'] = gh_repo('wikimedia/DeadlinkChecker')
         conf['repos']['HtmlFormatter'] = repo_info('HtmlFormatter')
         conf['repos']['IPSet'] = repo_info('IPSet')
+        conf['repos']['jQuery Client'] = repo_info('jquery-client')
+        conf['repos']['mwbot-rs'] = wmf_gitlab_repo('repos/mwbot-rs/mwbot')
+        conf['repos']['mw-node-qunit'] = gh_repo('wikimedia/mw-node-qunit')
+        conf['repos']['oauthclient-php'] = repo_info('mediawiki/oauthclient-php')
+        conf['repos']['php-session-serializer'] = repo_info('php-session-serializer')
+        conf['repos']['phan-taint-check-plugin'] = \
+            repo_info('mediawiki/tools/phan/SecurityCheckPlugin')
         conf['repos']['RelPath'] = repo_info('RelPath')
         conf['repos']['RunningStat'] = repo_info('RunningStat')
         conf['repos']['WrappedString'] = repo_info('WrappedString')
-        conf['repos']['MediaWiki CodeSniffer'] = repo_info(
-            'mediawiki/tools/codesniffer'
-        )
-        conf['repos']['MediaWiki Phan'] = repo_info('mediawiki/tools/phan')
-        conf['repos']['SecurityCheckPlugin'] = repo_info(
-            'mediawiki/tools/phan/SecurityCheckPlugin'
-        )
         conf['repos']['Purtle'] = repo_info('purtle')
-
+        conf['repos']['testing-access-wrapper'] = repo_info('testing-access-wrapper')
+        conf['repos']['TextCat'] = repo_info('wikimedia/textcat')
         conf['repos']['wvui'] = repo_info('wvui')
-        conf['repos']['codex'] = repo_info('design/codex')
+        conf['repos'].update(gerrit_prefix_list('design/'))
+        conf['repos']['wikipeg'] = repo_info('wikipeg')
 
         # Wikibase libraries
         conf['repos']['WikibaseDataModel'] = gh_repo('wmde/WikibaseDataModel')
@@ -356,22 +443,54 @@ def make_conf(name, args, core=False, exts=False, skins=False, ooui=False,
             gh_repo('wmde/WikibaseSerializationJavaScript')
         conf['repos']['WikibaseDataModelJavaScript'] = gh_repo('wmde/WikibaseDataModelJavaScript')
 
+    if ooui:
+        conf['repos']['oojs/core'] = repo_info('oojs/core')
+        conf['repos']['oojs/ui'] = repo_info('oojs/ui')
+        conf['repos']['oojs/router'] = repo_info('oojs/router')
+
+    if milkshake:
+        ms_repos = ['jquery.uls', 'jquery.ime', 'jquery.webfonts', 'jquery.i18n',
+                    'language-data']
+        for ms_repo in ms_repos:
+            conf['repos'][ms_repo] = gh_repo('wikimedia/' + ms_repo)
+
     if analytics:
-        conf['repos'].update(gerrit_prefix_list('analytics/'))
+        conf["repos"].update(gerrit_prefix_list("analytics/"))
+        conf["repos"].update(wmf_gitlab_group_projects("repos/data-engineering/"))
     if schemas:
         # schemas/event/ requested in T275705
         conf['repos'].update(gerrit_prefix_list('schemas/event/'))
 
     if shouthow:
-        conf['repos']['ShoutHow'] = gh_repo('ashley/ShoutHow', host='git.legoktm.com')
+        conf['repos']['ShoutHow'] = gogs_repo('ashley/ShoutHow', host='git.legoktm.com')
 
     if wmcs:
         # toolforge infra
         conf['repos'].update(gerrit_prefix_list('operations/software/tools-'))
         conf['repos'].update(gerrit_prefix_list('cloud/toolforge/'))
-
+        conf['repos'].update(gerrit_prefix_list('cloud/metricsinfra/'))
+        conf['repos']['cloud/wmcs-cookbooks'] = repo_info('cloud/wmcs-cookbooks')
+        conf['repos']['operations/docker-images/toollabs-images'] = repo_info(
+            'operations/docker-images/toollabs-images'
+        )
         # custom horizon panels, but not upstream code
         conf['repos'].update(gerrit_prefix_list('openstack/horizon/wmf-'))
+
+        # user repos for Toolforge, gadgets, and VPS projects.
+        # old one, with some active projects
+        conf['repos'].update(gerrit_prefix_list('labs/tools/'))
+        # new one, with most projects
+        conf["repos"].update(wmf_gitlab_group_projects("toolforge-repos"))
+        # admin repos for cloud including toolforge
+        conf["repos"].update(wmf_gitlab_group_projects("repos/cloud"))
+        conf['repos'].update(gerrit_prefix_list('mediawiki/gadgets/'))
+        conf['repos'].update(gerrit_prefix_list('wikipedia/gadgets/'))
+        conf['repos'].update(gerrit_prefix_list('labs/codesearch'))
+        conf['repos'].update(gerrit_prefix_list('labs/countervandalism/'))
+        # T358983
+        conf['repos'].update(gerrit_prefix_list('labs/toollabs'))
+        # T371992
+        conf['repos'].update(wmf_gitlab_group_projects('toolforge-repos/'))
 
     dirname = f'hound-{name}'
     directory = os.path.join(DATA, dirname)
@@ -423,25 +542,25 @@ def main():
               ooui=True,
               operations=True,
               puppet=True,
+              twn=True,
+              milkshake=True,
+              pywikibot=True,
+              services=True,
+              libs=True,
+              analytics=True,
+              wmcs=True,
+              schemas=True,
+              devtools=True,
               # A dead codebase used by just one person
               armchairgm=False,
-              twn=True,
-              # FIXME: Justify
-              milkshake=False,
               # All of these should already be included via core/exts/skins
               bundled=False,
               # Avoiding upstream libraries; to reconsider, see T227704
               vendor=False,
               # All of these should already be included via core/exts/skins
               wikimedia=False,
-              pywikibot=True,
-              services=True,
-              libs=True,
-              analytics=True,
-              wmcs=True,
               # Heavily duplicates MediaWiki core + extensions
               shouthow=False,
-              schemas=True,
               )
 
     make_conf('core', args, core=True)
@@ -454,13 +573,14 @@ def main():
     make_conf('armchairgm', args, armchairgm=True)
     make_conf('milkshake', args, milkshake=True)
     make_conf('bundled', args, core=True, bundled=True, vendor=True)
-    make_conf('deployed', args, core=True, wikimedia=True, vendor=True, services=True)
+    make_conf('deployed', args, core=True, wikimedia=True, vendor=True, services=True, schemas=True)
     make_conf('services', args, services=True)
     make_conf('libraries', args, ooui=True, milkshake=True, libs=True)
-    make_conf('analytics', args, analytics=True)
+    make_conf('analytics', args, analytics=True, schemas=True)
     make_conf('wmcs', args, wmcs=True)
     make_conf('puppet', args, puppet=True)
     make_conf('shouthow', args, shouthow=True)
+    make_conf('devtools', args, devtools=True)
 
 
 if __name__ == '__main__':

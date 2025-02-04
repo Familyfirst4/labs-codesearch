@@ -1,0 +1,9 @@
+RewriteEngine on
+
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteRule ^/?[_0-9a-z]+/?$ /index.php [L,QSA]
+
+# Compat redirect for scripts written against the Hound UI,
+# which exposes the API on the same domain
+RewriteRule ^/?([0-9a-z]+/api/.+)$ https://codesearch-backend.wmcloud.org/$1 [L,R=301]

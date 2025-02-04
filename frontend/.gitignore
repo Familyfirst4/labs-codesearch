@@ -1,2 +1,8 @@
-/target
-/pkg
+/vendor/
+/node_modules/
+/.eslintcache
+/composer.lock
+/package-lock.json
+/memprof.callgrind.*
+/trace-*.json
+/staticversion.txt
