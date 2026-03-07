@@ -116,8 +116,12 @@ function buildResultsPhabricator( repos, resultsOriginal ) {
 			}
 		},
 		Object.entries( resultsOriginal ).flatMap( ( [ repoId, result ] ) => {
+			const hasMore = result.FilesWithMatch > result.Matches.length;
+			const countText = hasMore ?
+				`${result.Matches.length} of ${result.FilesWithMatch} files` :
+				`${result.FilesWithMatch} files`;
 			return [
-				`[ ] ${repoId} (${result.FilesWithMatch} files)\n`,
+				`[ ] ${repoId} (${countText})\n`,
 				...result.Matches.map( ( match ) => {
 					const repoConf = repos[ repoId ];
 					const url = formatUrl( repoConf, result.Revision, match.Filename, undefined );
