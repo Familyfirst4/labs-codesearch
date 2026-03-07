@@ -504,7 +504,9 @@ def make_conf(name, args, core=False, exts=False, skins=False, ooui=False,
         conf['repos']['ShoutHow'] = gogs_repo('ashley/ShoutHow', host='git.legoktm.com')
 
     if wmcs:
-        # toolforge infra
+        #
+        # WMCS infra and admin
+        #
         conf['repos'].update(gerrit_prefix_list('operations/software/tools-'))
         conf['repos'].update(gerrit_prefix_list('cloud/toolforge/'))
         conf['repos'].update(gerrit_prefix_list('cloud/metricsinfra/'))
@@ -512,26 +514,28 @@ def make_conf(name, args, core=False, exts=False, skins=False, ooui=False,
         conf['repos']['operations/docker-images/toollabs-images'] = repo_info(
             'operations/docker-images/toollabs-images'
         )
-        # T412604
-        conf['repos']['Striker'] = repo_info('labs/striker')
+        conf['repos']['PAWS'] = gh_repo('toolforge/paws')
+        conf['repos']['toolforge/quarry'] = gh_repo('toolforge/quarry')
         # custom horizon panels, but not upstream code
         conf['repos'].update(gerrit_prefix_list('openstack/horizon/wmf-'))
-
-        # user repos for Toolforge, gadgets, and VPS projects.
-        # old one, with some active projects
-        conf['repos'].update(gerrit_prefix_list('labs/tools/'))
-        # new one, with most projects (T371992)
-        conf['repos'].update(wmf_gitlab_group_projects('toolforge-repos'))
         # admin repos for cloud including toolforge
-        conf["repos"].update(wmf_gitlab_group_projects("repos/cloud"))
+        conf['repos'].update(wmf_gitlab_group_projects('repos/cloud'))
+        # T412604
+        conf['repos']['Striker'] = repo_info('labs/striker')
+
+        #
+        # user repos for Toolforge, gadgets, and Cloud VPS projects
+        #
+        conf['repos'].update(gerrit_prefix_list('labs/tools/'))
         conf['repos'].update(gerrit_prefix_list('mediawiki/gadgets/'))
         conf['repos'].update(gerrit_prefix_list('wikipedia/gadgets/'))
         conf['repos'].update(gerrit_prefix_list('labs/codesearch'))
         conf['repos'].update(gerrit_prefix_list('labs/countervandalism/'))
+        conf['repos']['toolforge/video2commons'] = gh_repo('toolforge/video2commons')
         # T358983
         conf['repos'].update(gerrit_prefix_list('labs/toollabs'))
-        # paws, change once we move to gitlab
-        conf['repos']['PAWS'] = gh_repo('toolforge/paws')
+        # T371992
+        conf['repos'].update(wmf_gitlab_group_projects('toolforge-repos'))
 
     if apps:
         conf['repos']['Wikipedia Android app'] = gh_repo('wikimedia/apps-android-wikipedia')
