@@ -370,6 +370,8 @@ def make_conf(name, args, core=False, exts=False, skins=False, ooui=False,
         conf['repos']['sre/prometheus-rdkafka-exporter'] = wmf_gitlab_repo('repos/sre/prometheus-rdkafka-exporter')
         conf['repos']['sre/purged'] = wmf_gitlab_repo('repos/sre/purged')
         conf['repos']['sre/pybal'] = wmf_gitlab_repo('repos/sre/pybal')
+        conf['repos']['sre/sloth'] = wmf_gitlab_repo('repos/sre/sloth')
+        conf['repos']['sre/slothslos'] = wmf_gitlab_repo('repos/sre/slothslos')
         conf['repos']['sre/varnishkafka'] = wmf_gitlab_repo('repos/sre/varnishkafka')
 
         conf['repos']['operations/dumps'] = repo_info('operations/dumps')
