@@ -395,6 +395,7 @@ def make_conf(name, args, core=False, exts=False, skins=False, ooui=False,
         conf['repos']['Blubber'] = wmf_gitlab_repo('repos/releng/blubber')
         conf['repos']['dev-images'] = wmf_gitlab_repo('repos/releng/dev-images')
         conf['repos']['patchdemo'] = wmf_gitlab_repo('repos/qte/catalyst/patchdemo')
+        conf['repos']['catalyst-ci-charts'] = wmf_gitlab_repo('repos/test-platform/catalyst/ci-charts')
 
         conf['repos']['mw-node-qunit'] = gh_repo('wikimedia/mw-node-qunit')
 
