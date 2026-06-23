@@ -2,7 +2,7 @@ version: v4
 base: docker-registry.wikimedia.org/bullseye:latest
 variants:
   build:
-    base: docker-registry.wikimedia.org/golang1.15:1.15-1
+    base: docker-registry.wikimedia.org/golang1.15:1.15-1-20260621
     apt:
       packages:
         - gcc
