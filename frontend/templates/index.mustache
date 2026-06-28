@@ -53,14 +53,24 @@
 			</div>
 			<div class="mb-2 col-12 order-3 col-md-4 col-lg-5 col-xl-3">
 				<div class="form-floating">
-					<input type="text" class="form-control" id="cs-field-filePath" placeholder="" name="files" value="{{fields.filePath}}">
+					<input type="text" class="form-control" id="cs-field-filePath" list="cs-field-filePath-datalist" placeholder="" name="files" value="{{fields.filePath}}">
 					<label class="form-label" for="cs-field-filePath">File path (regexp)</label>
+					<datalist id="cs-field-filePath-datalist">
+						<option value="\.php$"></option>
+						<option value="\.js$"></option>
+						<option value="\.js$|\.ts$|\.vue$"></option>
+					</datalist>
 				</div>
 			</div>
 			<div class="mb-2 col-12 order-3 col-md-4 col-lg-4 col-xl-3">
 				<div class="form-floating">
-					<input type="text" class="form-control" id="cs-field-excludeFiles" placeholder="" name="excludeFiles" value="{{fields.excludeFiles}}">
+					<input type="text" class="form-control" id="cs-field-excludeFiles" list="cs-field-excludeFiles-datalist" placeholder="" name="excludeFiles" value="{{fields.excludeFiles}}">
 					<label class="form-label" for="cs-field-excludeFiles">Exclude files (regexp)</label>
+					<datalist id="cs-field-excludeFiles-datalist">
+						<option value="i18n/.*\.json$"></option>
+						<option value="node_modules|modules/lib|resources/lib"></option>
+						<option value="^tests/|/tests/"></option>
+					</datalist>
 				</div>
 			</div>
 			<div class="mb-2 col-12 order-3 col-md-8 col-lg-9 col-xl-4">
